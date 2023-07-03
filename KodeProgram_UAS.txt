@@ -1,0 +1,103 @@
+#include <ThingerESP8266.h>
+#include <OneWire.h> //Library OneWire
+#include <DallasTemperature.h> // Library untuk Dallas temperature
+#include <LiquidCrystal_I2C.h> //Library I2C LCD
+//----------------------------------------
+
+#define USERNAME "azetcollection"
+#define DEVICE_ID "SuhuAkuarium"
+#define DEVICE_CREDENTIAL "JKp-ousv-QPm4GQQ"
+
+ThingerESP8266 thing(USERNAME, DEVICE_ID, DEVICE_CREDENTIAL); //--> Initialize Thinger IO (ThingerESP8266)
+
+//----------------------------------------SSID and Password of your WiFi Router/Hotspot.
+
+const char* ssid = "Lare osing"; //--> Your wifi name or SSID.
+const char* password = "osingdeles"; //--> Your wifi password.
+//----------------------------------------DHT11 Sensor Configuration
+LiquidCrystal_I2C lcd(0x27,16,2); //alamat I2C
+#define buzzer D3 //pin D3 untuk buzzer
+#define ONE_WIRE_BUS D4 // pin D4 digunakan untuk data hasil baca sensor
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire); 
+
+float suhuDS18B20;
+String kondisi="";
+String kondisi1="";
+int hold_key1 = 0;
+int hold_key2 = 0;
+void setup() {
+  Serial.begin(9600);
+ sensors.begin(); //memulai baca sensor
+  lcd.begin(16,2);
+  lcd.init();
+  
+// Nyalakan backlight
+  lcd.backlight();
+  pinMode(buzzer, OUTPUT); //inisialisasi buzzer sebagai output
+  // Set WiFi to station mode and disconnect from an AP if it was Previously
+  WiFi.begin(ssid, password); //--> Connect to your WiFi router
+
+  //----------------------------------------Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    //----------------------------------------Make the On Board Flashing LED on the process of connecting to the wifi router.
+    delay(250);
+    //----------------------------------------
+  }
+  //----------------------------------------
+  
+ // digitalWrite(ON_Board_LED, HIGH); //--> Turn off the On Board LED when it is connected to the wifi router.
+
+  thing.add_wifi(ssid, password); //--> Initialize wifi
+
+  //----------------------------------------Sends DHT11 Sensor data (Temperature and Humidity) to Thinger IO
+  // Symbol or operator ">>" means to transmit data
+  thing["DS18b20"] >> [](pson & out) {
+    out["temperature"] = suhuDS18B20;
+    out["kondisi"] = kondisi; //tipe wiget "text value kirim email pilih menu endpoints sebelah kiri io  
+  };
+}
+
+void loop() {
+
+  // call always the thing handle in the loop and avoid any delay here
+  thing.handle();
+
+  //----------------------------------------To get temperature and humidity data from the DHT11 sensor
+  sensors.requestTemperatures(); //baca sensor
+ suhuDS18B20 = sensors.getTempCByIndex(0);
+  //Penulisan suhu pada LCD dan serial monitor
+  Serial.println(suhuDS18B20);
+
+  //Jika suhu lebih dari 30
+  if ((suhuDS18B20 > 30)&& (hold_key1 != 1)) {
+    hold_key1 = 1;
+thing.call_endpoint("Monitoring_suhu_akuarium");
+    digitalWrite(buzzer, LOW);
+ Serial.println("SUHU PANAS");
+    lcd.setCursor(0,0);
+    lcd.print("SUHU PANAS!"); //menampilkan SUHU PANAS di LCD
+    }
+
+  else if ((suhuDS18B20 < 25)&& (hold_key2 != 1)) {
+    hold_key2 = 1;
+thing.call_endpoint("Pemantauan_suhu_akuarium");//
+Serial.println("SUHU DINGIN");
+    digitalWrite(buzzer, LOW);
+    lcd.setCursor(0,0);
+    lcd.print("SUHU DINGIN!"); //menampilkan SUHU DINGIN di LCD
+  }
+   else if ((suhuDS18B20 > 25) && (suhuDS18B20 < 30)) 
+  
+  { hold_key1 = 0;
+   hold_key2 = 0;
+     digitalWrite(buzzer, HIGH);
+   Serial.println("SUHU Normal");
+    lcd.setCursor(0,0);
+    lcd.print("Suhu air : ");
+    lcd.setCursor(0,1);
+    lcd.print(suhuDS18B20);
+  }
+  lcd.clear();
+}
